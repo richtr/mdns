@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/miekg/dns"
 	"net"
+	"os"
 	"strings"
 )
 
@@ -17,10 +18,14 @@ type Zone interface {
 type MDNSService struct {
 	Instance string // Instance name (e.g. host name)
 	Service  string // Service name (e.g. _http._tcp.)
-	Addr     net.IP // Service IP
 	Port     int    // Service Port
 	Info     string // Service info served as a TXT record
 	Domain   string // If blank, assumes ".local"
+
+	HostName string   // Host machine DNS name
+
+	ipv4Addr net.IP // Host machine IPv4 address
+	ipv6Addr net.IP // Host machine IPv6 address
 
 	serviceAddr  string // Fully qualified service address
 	instanceAddr string // Fully qualified instance address
@@ -40,11 +45,29 @@ func (m *MDNSService) Init() error {
 	if m.Service == "" {
 		return fmt.Errorf("Missing service name")
 	}
-	if m.Addr == nil {
-		return fmt.Errorf("Missing service address")
-	}
 	if m.Port == 0 {
 		return fmt.Errorf("Missing service port")
+	}
+
+	// Get host information
+	hostName, err := os.Hostname()
+	if err == nil {
+		m.HostName = fmt.Sprintf("%s.", hostName)
+
+		addrs, err := net.LookupIP(hostName)
+		if err != nil {
+			return fmt.Errorf("Could not determine host IP addresses for %s", hostName)
+		}
+
+		for i := 0; i < len(addrs); i++ {
+			if ipv4 := addrs[i].To4(); ipv4 != nil {
+				m.ipv4Addr = ipv4
+			} else if ipv6 := addrs[i].To16(); ipv6 != nil {
+				m.ipv6Addr = ipv6
+			}
+		}
+	} else {
+		return fmt.Errorf("Could not determine host")
 	}
 
 	// Create the full addresses
@@ -83,7 +106,7 @@ func (m *MDNSService) serviceRecords(q dns.Question) []dns.RR {
 				Name:   q.Name,
 				Rrtype: dns.TypePTR,
 				Class:  dns.ClassINET,
-				Ttl:    0,
+				Ttl:    10,
 			},
 			Ptr: m.instanceAddr,
 		}
@@ -121,35 +144,33 @@ func (m *MDNSService) instanceRecords(q dns.Question) []dns.RR {
 
 	case dns.TypeA:
 		// Only handle if we have a ipv4 addr
-		ipv4 := m.Addr.To4()
-		if ipv4 == nil {
+		if m.ipv4Addr == nil {
 			return nil
 		}
 		a := &dns.A{
 			Hdr: dns.RR_Header{
-				Name:   q.Name,
+				Name:   m.HostName,
 				Rrtype: dns.TypeA,
 				Class:  dns.ClassINET,
-				Ttl:    0,
+				Ttl:    10,
 			},
-			A: ipv4,
+			A: m.ipv4Addr,
 		}
 		return []dns.RR{a}
 
 	case dns.TypeAAAA:
 		// Only handle if we have a ipv6 addr
-		ipv6 := m.Addr.To16()
-		if m.Addr.To4() != nil {
+		if m.ipv6Addr == nil {
 			return nil
 		}
 		a4 := &dns.AAAA{
 			Hdr: dns.RR_Header{
-				Name:   q.Name,
+				Name:   m.HostName,
 				Rrtype: dns.TypeAAAA,
 				Class:  dns.ClassINET,
-				Ttl:    0,
+				Ttl:    10,
 			},
-			AAAA: ipv6,
+			AAAA: m.ipv6Addr,
 		}
 		return []dns.RR{a4}
 
@@ -160,13 +181,14 @@ func (m *MDNSService) instanceRecords(q dns.Question) []dns.RR {
 				Name:   q.Name,
 				Rrtype: dns.TypeSRV,
 				Class:  dns.ClassINET,
-				Ttl:    0,
+				Ttl:    10,
 			},
 			Priority: 10,
 			Weight:   1,
 			Port:     uint16(m.Port),
-			Target:   q.Name,
+			Target:   m.HostName,
 		}
+
 		recs := []dns.RR{srv}
 
 		// Add the A record
@@ -188,7 +210,7 @@ func (m *MDNSService) instanceRecords(q dns.Question) []dns.RR {
 				Name:   q.Name,
 				Rrtype: dns.TypeTXT,
 				Class:  dns.ClassINET,
-				Ttl:    0,
+				Ttl:    10,
 			},
 			Txt: []string{m.Info},
 		}
