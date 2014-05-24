@@ -59,16 +59,16 @@ func (m *MDNSService) Init() error {
 	if err == nil {
 		m.HostName = fmt.Sprintf("%s.", hostName)
 
-		addrs, err := net.LookupIP(hostName)
+		addrs, err := net.LookupIP(m.HostName)
 		if err != nil {
-			return fmt.Errorf("Could not determine host IP addresses for %s", hostName)
+			return fmt.Errorf("Could not determine host IP addresses for %s", m.HostName)
 		}
 
 		for i := 0; i < len(addrs); i++ {
 			if ipv4 := addrs[i].To4(); ipv4 != nil {
-				m.ipv4Addr = ipv4
+				m.ipv4Addr = addrs[i]
 			} else if ipv6 := addrs[i].To16(); ipv6 != nil {
-				m.ipv6Addr = ipv6
+				m.ipv6Addr = addrs[i]
 			}
 		}
 	} else {
