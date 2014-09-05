@@ -25,7 +25,7 @@ type MDNSService struct {
 	Service  string // Service name (e.g. _http._tcp.)
 	Port     int    // Service Port
 	Info     string // Service info served as a TXT record
-	Domain   string // If blank, assumes ".local"
+	Domain   string // If blank, assumes "local"
 
 	HostName string   // Host machine DNS name
 
@@ -61,7 +61,15 @@ func (m *MDNSService) Init() error {
 
 		addrs, err := net.LookupIP(m.HostName)
 		if err != nil {
-			return fmt.Errorf("Could not determine host IP addresses for %s", m.HostName)
+			// Try appending the host domain suffix and lookup again
+			// (required for Linux-based hosts)
+			tmpHostName := fmt.Sprintf("%s%s.", m.HostName, m.Domain)
+
+			addrs, err = net.LookupIP(tmpHostName)
+
+			if err != nil {
+				return fmt.Errorf("Could not determine host IP addresses for %s", m.HostName)
+			}
 		}
 
 		for i := 0; i < len(addrs); i++ {
