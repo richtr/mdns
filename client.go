@@ -177,6 +177,7 @@ func (c *client) query(params *QueryParam) error {
 	// Send the query
 	m := new(dns.Msg)
 	m.SetQuestion(serviceAddr, dns.TypeANY)
+	m.RecursionDesired = false
 	if err := c.sendQuery(m, params); err != nil {
 		return nil
 	}
@@ -238,6 +239,7 @@ func (c *client) query(params *QueryParam) error {
 				// Fire off a node specific query
 				m := new(dns.Msg)
 				m.SetQuestion(inp.Name, dns.TypeANY)
+				m.RecursionDesired = false
 				if err := c.sendQuery(m, params); err != nil {
 					log.Printf("[ERR] mdns: Failed to query instance %s: %v", inp.Name, err)
 				}
