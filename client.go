@@ -39,6 +39,9 @@ type QueryParam struct {
 	Timeout   time.Duration        // Lookup timeout, default 1 second
 	Interface *net.Interface       // Multicast interface to use
 	Entries   chan<- *ServiceEntry // Entries Channel
+
+	IPv4mdns  *net.UDPAddr
+	IPv6mdns  *net.UDPAddr
 }
 
 // DefaultParams is used to return a default set of QueryParam's
@@ -48,6 +51,8 @@ func DefaultParams(service string) *QueryParam {
 		Domain:  "local",
 		Timeout: time.Second,
 		Entries: make(chan *ServiceEntry),
+		IPv4mdns: ipv4Addr,
+		IPv6mdns: ipv6Addr,
 	}
 }
 
@@ -106,11 +111,11 @@ func newClient() (*client, error) {
 	// Create a IPv4 listener
 	ipv4, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
 	if err != nil {
-		log.Printf("[ERR] mdns: Failed to bind to udp4 port: %v", err)
+		log.Printf("[ERR] mdns client: Failed to bind to udp4 port: %v", err)
 	}
 	ipv6, err := net.ListenUDP("udp6", &net.UDPAddr{IP: net.IPv6zero, Port: 0})
 	if err != nil {
-		log.Printf("[ERR] mdns: Failed to bind to udp6 port: %v", err)
+		log.Printf("[ERR] mdns client: Failed to bind to udp6 port: %v", err)
 	}
 
 	if ipv4 == nil && ipv6 == nil {
@@ -172,7 +177,7 @@ func (c *client) query(params *QueryParam) error {
 	// Send the query
 	m := new(dns.Msg)
 	m.SetQuestion(serviceAddr, dns.TypeANY)
-	if err := c.sendQuery(m); err != nil {
+	if err := c.sendQuery(m, params); err != nil {
 		return nil
 	}
 
@@ -233,7 +238,7 @@ func (c *client) query(params *QueryParam) error {
 				// Fire off a node specific query
 				m := new(dns.Msg)
 				m.SetQuestion(inp.Name, dns.TypeANY)
-				if err := c.sendQuery(m); err != nil {
+				if err := c.sendQuery(m, params); err != nil {
 					log.Printf("[ERR] mdns: Failed to query instance %s: %v", inp.Name, err)
 				}
 			}
@@ -245,16 +250,16 @@ func (c *client) query(params *QueryParam) error {
 }
 
 // sendQuery is used to multicast a query out
-func (c *client) sendQuery(q *dns.Msg) error {
+func (c *client) sendQuery(q *dns.Msg, params *QueryParam) error {
 	buf, err := q.Pack()
 	if err != nil {
 		return err
 	}
 	if c.ipv4List != nil {
-		c.ipv4List.WriteTo(buf, ipv4Addr)
+		c.ipv4List.WriteTo(buf, params.IPv4mdns)
 	}
 	if c.ipv6List != nil {
-		c.ipv6List.WriteTo(buf, ipv6Addr)
+		c.ipv6List.WriteTo(buf, params.IPv6mdns)
 	}
 	return nil
 }

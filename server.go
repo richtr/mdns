@@ -34,6 +34,9 @@ type Config struct {
 	// interface. If not provided, the system default multicase interface
 	// is used.
 	Iface *net.Interface
+
+	IPv4Addr *net.UDPAddr
+	IPv6Addr *net.UDPAddr
 }
 
 // mDNS server is used to listen for mDNS queries and respond if we
@@ -51,14 +54,22 @@ type Server struct {
 
 // NewServer is used to create a new mDNS server from a config
 func NewServer(config *Config) (*Server, error) {
-	// Create the listeners
-	ipv4List, err := net.ListenMulticastUDP("udp4", config.Iface, ipv4Addr)
-	if err != nil {
-		log.Printf("[ERR] mdns: Failed to start IPv4 listener: %v", err)
+
+	if config.IPv4Addr == nil {
+		config.IPv4Addr = ipv4Addr
 	}
-	ipv6List, err := net.ListenMulticastUDP("udp6", config.Iface, ipv6Addr)
+	if config.IPv6Addr == nil {
+		config.IPv6Addr = ipv6Addr
+	}
+
+	// Create the listeners
+	ipv4List, err := net.ListenMulticastUDP("udp4", config.Iface, config.IPv4Addr)
 	if err != nil {
-		log.Printf("[ERR] mdns: Failed to start IPv6 listener: %v", err)
+		log.Printf("[ERR] mdns server: Failed to start IPv4 listener: %v", err)
+	}
+	ipv6List, err := net.ListenMulticastUDP("udp6", config.Iface, config.IPv6Addr)
+	if err != nil {
+		log.Printf("[ERR] mdns server: Failed to start IPv6 listener: %v", err)
 	}
 
 	// Check if we have any listener
